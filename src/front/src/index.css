@@ -70,6 +70,23 @@ select {
   cursor: pointer;
 }
 
+select option {
+  padding: 6px 10px;
+  color: #333;
+}
+
+select option:checked {
+  background: #10b981;
+  color: #fff;
+}
+
+select option:hover,
+select option:focus,
+select option:active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 input[type="checkbox"] {
   accent-color: #10b981;
   cursor: pointer;
