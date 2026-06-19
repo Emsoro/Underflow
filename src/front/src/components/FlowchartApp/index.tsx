@@ -638,13 +638,8 @@ function PropertyPanel({
   return (
     <div style={panelStyle}>
       <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Edge Properties</h3>
-      <div style={fieldStyle}>
-        <label>ID</label>
-        <input style={inputStyle} value={edge.id} disabled />
-      </div>
-      <div style={fieldStyle}>
-        <label>Source → Target</label>
-        <input style={inputStyle} value={`${edge.source} → ${edge.target}`} disabled />
+      <div style={{ ...fieldStyle, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 12, color: '#999', flexShrink: 0 }}>{edge.source} → {edge.target}</span>
       </div>
       <div style={fieldStyle}>
         <label>Label</label>
@@ -670,6 +665,19 @@ function PropertyPanel({
               {o.label}
             </option>
           ))}
+        </select>
+      </div>
+      <div style={fieldStyle}>
+        <label>Arrow</label>
+        <select
+          style={inputStyle}
+          value={(edge.markerEnd as { type: MarkerType })?.type ?? MarkerType.ArrowClosed}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+            onUpdateEdge(edge.id, { markerEnd: { type: e.target.value as MarkerType } })
+          }
+        >
+          <option value={MarkerType.ArrowClosed}>Filled Arrow</option>
+          <option value={MarkerType.Arrow}>Open Arrow</option>
         </select>
       </div>
       <div style={fieldStyle}>
