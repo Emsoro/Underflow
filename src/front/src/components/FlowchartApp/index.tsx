@@ -966,27 +966,69 @@ const FlowchartAppInner = () => {
           />
           <Controls />
           <Panel position="top-left">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Add node buttons */}
-              <div style={toolbarStyle}>
-                <button onClick={addInputNode} style={btnStyle('#475569')}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ pointerEvents: 'none' }}>
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Start
-                </button>
-                <button onClick={addNode} style={btnStyle('#475569')}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ pointerEvents: 'none' }}>
-                    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                  Node
-                </button>
-                <button onClick={addOutputNode} style={btnStyle('#475569')}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ pointerEvents: 'none' }}>
-                    <path d="M13 8H3M7 4L3 8l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  End
-                </button>
+              <div style={{
+                display: 'flex', gap: 8, background: 'rgba(255,255,255,0.92)',
+                padding: '10px 14px', borderRadius: 16,
+                boxShadow: '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+                backdropFilter: 'blur(12px)',
+              }}>
+                {[
+                  { label: 'Start', color: '#10b981', hover: '#059669', icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
+                      <path d="M4 9h10M10 5l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ), onClick: addInputNode },
+                  { label: 'Node', color: '#3b82f6', hover: '#2563eb', icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
+                      <path d="M9 4v10M4 9h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  ), onClick: addNode },
+                  { label: 'End', color: '#ef4444', hover: '#dc2626', icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
+                      <path d="M14 9H4M8 5L4 9l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ), onClick: addOutputNode },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={item.onClick}
+                    title={`Add ${item.label}`}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                      background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
+                      borderRadius: 12, transition: 'all 180ms ease', pointerEvents: 'all',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `${item.color}12`;
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.background = item.hover;
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.transform = 'scale(1.08)';
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.boxShadow = `0 4px 14px ${item.color}50`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'none';
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.background = item.color;
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.transform = 'scale(1)';
+                      (e.currentTarget.querySelector('.node-icon') as HTMLElement).style.boxShadow = `0 2px 8px ${item.color}30`;
+                    }}
+                  >
+                    <div
+                      className="node-icon"
+                      style={{
+                        width: 36, height: 36, borderRadius: 10, background: item.color,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', boxShadow: `0 2px 8px ${item.color}30`,
+                        transition: 'all 180ms ease',
+                      }}
+                    >
+                      {item.icon}
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', letterSpacing: 0.3 }}>
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
               </div>
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1124,34 +1166,6 @@ const inputStyle: React.CSSProperties = {
   marginTop: 4,
   boxSizing: 'border-box',
 };
-
-const toolbarStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 6,
-  background: 'rgba(255,255,255,0.97)',
-  padding: '8px 12px',
-  borderRadius: 12,
-  boxShadow: '0 2px 16px rgba(0,0,0,0.1)',
-};
-
-function btnStyle(color: string): React.CSSProperties {
-  return {
-    background: color,
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    padding: '8px 16px',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    transition: 'all 150ms ease',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-    pointerEvents: 'all',
-  };
-}
 
 const actionBtnStyle: React.CSSProperties = {
   background: '#fff',
