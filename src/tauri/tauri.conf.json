@@ -1,0 +1,42 @@
+{
+  "productName": "UnderFlow",
+  "version": "1.0.0",
+  "identifier": "com.underflow.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "cd ../front && pnpm dev",
+    "beforeBuildCommand": "cd ../front && pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "UnderFlow",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "resources": [],
+    "copyright": "Copyright © 2026 UnderFlow. All rights reserved.",
+    "category": "DeveloperTool",
+    "shortDescription": "A modern flowchart editor",
+    "longDescription": "UnderFlow is a powerful and intuitive flowchart editor built with React and Tauri. Create, edit, and export professional flowcharts with ease.",
+    "homepage": "https://github.com/underflow/underflow",
+    "license": "MIT",
+    "licenseFile": null
+  }
+}

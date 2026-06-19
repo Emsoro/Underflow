@@ -1,0 +1,9 @@
+node_modules/
+dist/
+target/
+gen/
+src/front/src-tauri/
+*.exe
+*.msi
+*.icns
+.DS_Store
