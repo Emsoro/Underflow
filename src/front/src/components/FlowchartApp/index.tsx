@@ -47,6 +47,7 @@ type NodeData = {
 // ---------- Custom Condition Node (Diamond) ----------
 function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
+  const [hovered, setHovered] = useState(false);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -54,9 +55,14 @@ function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
   const fillColor = hasColor ? color! : '#fff';
   const strokeColor = hasBorderColor ? bColor! : (hasColor ? color! : '#cbd5e1');
   const textColor = hasColor ? '#fff' : '#333';
+  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
-    <div style={{ width: 140, height: 80, position: 'relative' }}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ width: 140, height: 80, position: 'relative' }}
+    >
       <svg width="140" height="80" viewBox="0 0 140 80" style={{ position: 'absolute', top: 0, left: 0 }}>
         <polygon
           points="70,2 138,40 70,78 2,40"
@@ -89,12 +95,12 @@ function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
           </div>
         )}
       </div>
-      <Handle type="target" position={Position.Top} style={{ ...handleStyle, top: -4 }} />
-      <Handle type="source" position={Position.Bottom} style={{ ...handleStyle, bottom: -4 }} />
-      <Handle type="target" id="left-in" position={Position.Left} style={{ ...handleStyle, left: -4 }} />
-      <Handle type="source" id="left-out" position={Position.Left} style={{ ...handleStyle, left: -4 }} />
-      <Handle type="target" id="right-in" position={Position.Right} style={{ ...handleStyle, right: -4 }} />
-      <Handle type="source" id="right-out" position={Position.Right} style={{ ...handleStyle, right: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
+      <Handle type="target" id="left-in" position={Position.Left} style={{ ...hs, left: -4 }} />
+      <Handle type="source" id="left-out" position={Position.Left} style={{ ...hs, left: -4 }} />
+      <Handle type="target" id="right-in" position={Position.Right} style={{ ...hs, right: -4 }} />
+      <Handle type="source" id="right-out" position={Position.Right} style={{ ...hs, right: -4 }} />
     </div>
   );
 }
@@ -172,7 +178,8 @@ function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
 }
 
 // ---------- Custom Flow Node (with 4 handles: top/right/bottom/left) ----------
-const handleStyle: React.CSSProperties = { width: 8, height: 8, background: '#555', border: '2px solid #fff' };
+const handleStyle: React.CSSProperties = { width: 8, height: 8, background: '#555', border: '2px solid #fff', opacity: 0, transition: 'opacity 150ms ease' };
+const handleVisibleStyle: React.CSSProperties = { ...handleStyle, opacity: 1 };
 
 function useInlineEdit(id: string, label: string | undefined) {
   const [editing, setEditing] = useState(false);
@@ -197,6 +204,7 @@ function useInlineEdit(id: string, label: string | undefined) {
 
 function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
+  const [hovered, setHovered] = useState(false);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -206,9 +214,12 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
+  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -223,12 +234,12 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Node'}</div>
       )}
-      <Handle type="target" position={Position.Top} style={{ ...handleStyle, top: -4 }} />
-      <Handle type="source" position={Position.Bottom} style={{ ...handleStyle, bottom: -4 }} />
-      <Handle type="target" id="left-in" position={Position.Left} style={{ ...handleStyle, left: -4 }} />
-      <Handle type="source" id="left-out" position={Position.Left} style={{ ...handleStyle, left: -4 }} />
-      <Handle type="target" id="right-in" position={Position.Right} style={{ ...handleStyle, right: -4 }} />
-      <Handle type="source" id="right-out" position={Position.Right} style={{ ...handleStyle, right: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
+      <Handle type="target" id="left-in" position={Position.Left} style={{ ...hs, left: -4 }} />
+      <Handle type="source" id="left-out" position={Position.Left} style={{ ...hs, left: -4 }} />
+      <Handle type="target" id="right-in" position={Position.Right} style={{ ...hs, right: -4 }} />
+      <Handle type="source" id="right-out" position={Position.Right} style={{ ...hs, right: -4 }} />
     </div>
   );
 }
@@ -236,6 +247,7 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
 // ---------- Input Node (bottom handle only) ----------
 function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
+  const [hovered, setHovered] = useState(false);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -245,9 +257,12 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
+  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -262,7 +277,7 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Input'}</div>
       )}
-      <Handle type="source" position={Position.Bottom} style={{ ...handleStyle, bottom: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
     </div>
   );
 }
@@ -270,6 +285,7 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
 // ---------- Output Node (top handle only) ----------
 function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
+  const [hovered, setHovered] = useState(false);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -279,9 +295,12 @@ function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
+  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -296,7 +315,7 @@ function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Output'}</div>
       )}
-      <Handle type="target" position={Position.Top} style={{ ...handleStyle, top: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
     </div>
   );
 }
