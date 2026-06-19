@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useMemo, useEffect } from 'react';
+import { useCallback, useState, useRef, useMemo, useEffect, createContext, useContext } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { saveFlowchart, loadFlowchart, saveFileDialog, openFileDialog, saveImageDialog, saveBinaryFile, saveTextFile, isTauri } from '../../lib/tauri';
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
@@ -47,7 +47,12 @@ type NodeData = {
 // ---------- Custom Condition Node (Diamond) ----------
 function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
-  const [hovered, setHovered] = useState(false);
+  const topH = useHandleVisible(id, undefined as any);
+  const bottomH = useHandleVisible(id, undefined as any);
+  const leftInH = useHandleVisible(id, 'left-in');
+  const leftOutH = useHandleVisible(id, 'left-out');
+  const rightInH = useHandleVisible(id, 'right-in');
+  const rightOutH = useHandleVisible(id, 'right-out');
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -55,14 +60,9 @@ function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
   const fillColor = hasColor ? color! : '#fff';
   const strokeColor = hasBorderColor ? bColor! : (hasColor ? color! : '#cbd5e1');
   const textColor = hasColor ? '#fff' : '#333';
-  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ width: 140, height: 80, position: 'relative' }}
-    >
+    <div style={{ width: 140, height: 80, position: 'relative' }}>
       <svg width="140" height="80" viewBox="0 0 140 80" style={{ position: 'absolute', top: 0, left: 0 }}>
         <polygon
           points="70,2 138,40 70,78 2,40"
@@ -95,12 +95,12 @@ function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
           </div>
         )}
       </div>
-      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
-      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
-      <Handle type="target" id="left-in" position={Position.Left} style={{ ...hs, left: -4 }} />
-      <Handle type="source" id="left-out" position={Position.Left} style={{ ...hs, left: -4 }} />
-      <Handle type="target" id="right-in" position={Position.Right} style={{ ...hs, right: -4 }} />
-      <Handle type="source" id="right-out" position={Position.Right} style={{ ...hs, right: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...topH, top: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...bottomH, bottom: -4 }} />
+      <Handle type="target" id="left-in" position={Position.Left} style={{ ...leftInH, left: -4 }} />
+      <Handle type="source" id="left-out" position={Position.Left} style={{ ...leftOutH, left: -4 }} />
+      <Handle type="target" id="right-in" position={Position.Right} style={{ ...rightInH, right: -4 }} />
+      <Handle type="source" id="right-out" position={Position.Right} style={{ ...rightOutH, right: -4 }} />
     </div>
   );
 }
@@ -181,6 +181,16 @@ function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
 const handleStyle: React.CSSProperties = { width: 8, height: 8, background: '#555', border: '2px solid #fff', opacity: 0, transition: 'opacity 150ms ease' };
 const handleVisibleStyle: React.CSSProperties = { ...handleStyle, opacity: 1 };
 
+const EdgesContext = createContext<Edge[]>([]);
+
+function useHandleVisible(nodeId: string, handleId: string): React.CSSProperties {
+  const edges = useContext(EdgesContext);
+  const connected = edges.some(
+    (e) => (e.source === nodeId && e.sourceHandle === handleId) || (e.target === nodeId && e.targetHandle === handleId)
+  );
+  return connected ? handleVisibleStyle : handleStyle;
+}
+
 function useInlineEdit(id: string, label: string | undefined) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(label ?? '');
@@ -204,7 +214,12 @@ function useInlineEdit(id: string, label: string | undefined) {
 
 function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
-  const [hovered, setHovered] = useState(false);
+  const topH = useHandleVisible(id, undefined as any);
+  const bottomH = useHandleVisible(id, undefined as any);
+  const leftInH = useHandleVisible(id, 'left-in');
+  const leftOutH = useHandleVisible(id, 'left-out');
+  const rightInH = useHandleVisible(id, 'right-in');
+  const rightOutH = useHandleVisible(id, 'right-out');
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -214,12 +229,9 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
-  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -234,12 +246,12 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Node'}</div>
       )}
-      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
-      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
-      <Handle type="target" id="left-in" position={Position.Left} style={{ ...hs, left: -4 }} />
-      <Handle type="source" id="left-out" position={Position.Left} style={{ ...hs, left: -4 }} />
-      <Handle type="target" id="right-in" position={Position.Right} style={{ ...hs, right: -4 }} />
-      <Handle type="source" id="right-out" position={Position.Right} style={{ ...hs, right: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...topH, top: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...bottomH, bottom: -4 }} />
+      <Handle type="target" id="left-in" position={Position.Left} style={{ ...leftInH, left: -4 }} />
+      <Handle type="source" id="left-out" position={Position.Left} style={{ ...leftOutH, left: -4 }} />
+      <Handle type="target" id="right-in" position={Position.Right} style={{ ...rightInH, right: -4 }} />
+      <Handle type="source" id="right-out" position={Position.Right} style={{ ...rightOutH, right: -4 }} />
     </div>
   );
 }
@@ -247,7 +259,7 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
 // ---------- Input Node (bottom handle only) ----------
 function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
-  const [hovered, setHovered] = useState(false);
+  const bottomH = useHandleVisible(id, undefined as any);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -257,12 +269,9 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
-  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -277,7 +286,7 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Input'}</div>
       )}
-      <Handle type="source" position={Position.Bottom} style={{ ...hs, bottom: -4 }} />
+      <Handle type="source" position={Position.Bottom} style={{ ...bottomH, bottom: -4 }} />
     </div>
   );
 }
@@ -285,7 +294,7 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
 // ---------- Output Node (top handle only) ----------
 function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
-  const [hovered, setHovered] = useState(false);
+  const topH = useHandleVisible(id, undefined as any);
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
   const hasBorderColor = !!(data as NodeData)?.borderColor;
@@ -295,12 +304,9 @@ function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const bgStyle: React.CSSProperties = hasColor
     ? { background: color, color: '#fff', border: `1px ${borderStyle} ${border}` }
     : { background: '#fff', color: '#333', border: `1px ${borderStyle} ${border}` };
-  const hs = hovered ? handleVisibleStyle : handleStyle;
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         padding: '10px 18px', borderRadius: 4, minWidth: 80,
         textAlign: 'center', fontSize: 13, fontWeight: 500,
@@ -315,7 +321,7 @@ function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
       ) : (
         <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>{(data as NodeData)?.label || 'Output'}</div>
       )}
-      <Handle type="target" position={Position.Top} style={{ ...hs, top: -4 }} />
+      <Handle type="target" position={Position.Top} style={{ ...topH, top: -4 }} />
     </div>
   );
 }
@@ -957,6 +963,7 @@ const FlowchartAppInner = () => {
   });
 
   return (
+    <EdgesContext.Provider value={edges}>
     <div ref={wrapperRef} style={{ display: 'flex', width: '100%', height: '100vh' }}>
       {/* Canvas */}
       <div style={{ flex: 1, height: '100%' }}>
@@ -1156,6 +1163,7 @@ const FlowchartAppInner = () => {
         )}
       </div>
     </div>
+    </EdgesContext.Provider>
   );
 };
 
