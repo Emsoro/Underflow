@@ -1007,6 +1007,7 @@ const FlowchartAppInner = () => {
           deleteKeyCode="Delete"
           snapToGrid
           snapGrid={[20, 20]}
+          style={{ margin: 0, padding: 0 }}
         >
           {bgVariant !== 'none' && <Background variant={bgVariant as BackgroundVariant} gap={bgGap} size={bgSize} />}
           <MiniMap
@@ -1024,17 +1025,17 @@ const FlowchartAppInner = () => {
                 backdropFilter: 'blur(12px)',
               }}>
                 {[
-                  { label: 'Start', color: '#10b981', hover: '#059669', icon: (
+                  { label: 'Start', color: '#059669', hover: '#047857', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M4 9h10M10 5l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   ), onClick: addInputNode },
-                  { label: 'Node', color: '#3b82f6', hover: '#2563eb', icon: (
+                  { label: 'Node', color: '#10b981', hover: '#059669', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M9 4v10M4 9h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   ), onClick: addNode },
-                  { label: 'End', color: '#ef4444', hover: '#dc2626', icon: (
+                  { label: 'End', color: '#34d399', hover: '#10b981', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M14 9H4M8 5L4 9l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -1192,7 +1193,7 @@ const FlowchartAppInner = () => {
 
 // ---------- Styles ----------
 const sidebarStyle: React.CSSProperties = {
-  width: 300,
+  width: 220,
   borderLeft: '1px solid #e0e0e0',
   background: '#fafafa',
   overflowY: 'auto',
