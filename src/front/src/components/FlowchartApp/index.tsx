@@ -412,12 +412,11 @@ const edgeTypeOptions = [
 
 const edgeMarkerOptions = [
   { label: 'None', value: 'none' },
-  { label: 'Filled Arrow', value: MarkerType.ArrowClosed },
-  { label: 'Open Arrow', value: MarkerType.Arrow },
-  { label: 'Filled Diamond', value: 'diamond-filled' },
-  { label: 'Open Diamond', value: 'diamond-open' },
-  { label: 'Filled Triangle', value: 'triangle-filled' },
-  { label: 'Open Triangle', value: 'triangle-open' },
+  { label: 'Filled Arrow', value: 'filled-arrow' },
+  { label: 'Hollow Arrow', value: 'hollow-arrow' },
+  { label: 'Open Arrow', value: 'open-arrow' },
+  { label: 'Hollow Diamond + Open Arrow', value: 'hollow-diamond-arrow' },
+  { label: 'Filled Diamond + Open Arrow', value: 'filled-diamond-arrow' },
 ];
 
 function useInjectCustomMarkers(edges: Edge[]) {
@@ -436,10 +435,9 @@ function useInjectCustomMarkers(edges: Edge[]) {
         svg.prepend(defs);
       }
       const markers = [
-        { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: '#555', stroke: '', refX: 6 },
+        { id: `${rfId}__color=none&type=hollow-arrow`, path: 'M-5,-4 0,0 -5,4', fill: 'none', stroke: '#555', refX: 0 },
         { id: `${rfId}__color=none&type=diamond-open`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: 'none', stroke: '#555', refX: 6 },
-        { id: `${rfId}__color=#555&type=triangle-filled`, path: 'M-6,-6 L6,0 L-6,6 Z', fill: '#555', stroke: '', refX: 5 },
-        { id: `${rfId}__color=none&type=triangle-open`, path: 'M-6,-6 L6,0 L-6,6 Z', fill: 'none', stroke: '#555', refX: 5 },
+        { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: '#555', stroke: '', refX: 6 },
       ];
       markers.forEach((m) => {
         if (defs.querySelector(`[id="${m.id}"]`)) return;
@@ -734,17 +732,38 @@ function PropertyPanel({
           style={inputStyle}
           value={(() => {
             const me = edge.markerEnd as { type?: string } | undefined;
-            if (!me) return 'none';
-            return me.type ?? MarkerType.ArrowClosed;
+            const ms = edge.markerStart as { type?: string } | undefined;
+            if (!me && !ms) return 'none';
+            if (ms && me) {
+              if (ms.type?.includes('diamond-open') && me.type === MarkerType.Arrow) return 'hollow-diamond-arrow';
+              if (ms.type?.includes('diamond-filled') && me.type === MarkerType.Arrow) return 'filled-diamond-arrow';
+            }
+            if (me?.type === MarkerType.ArrowClosed) return 'filled-arrow';
+            if (me?.type === 'hollow-arrow') return 'hollow-arrow';
+            if (me?.type === MarkerType.Arrow) return 'open-arrow';
+            return 'none';
           })()}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
             const val = e.target.value;
-            if (val === 'none') {
-              onUpdateEdge(edge.id, { markerEnd: undefined });
-            } else if (val === MarkerType.ArrowClosed || val === MarkerType.Arrow) {
-              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType } });
-            } else {
-              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType, color: '#555' } });
+            switch (val) {
+              case 'none':
+                onUpdateEdge(edge.id, { markerEnd: undefined, markerStart: undefined });
+                break;
+              case 'filled-arrow':
+                onUpdateEdge(edge.id, { markerEnd: { type: MarkerType.ArrowClosed }, markerStart: undefined });
+                break;
+              case 'hollow-arrow':
+                onUpdateEdge(edge.id, { markerEnd: { type: 'hollow-arrow' as MarkerType, color: '#555' }, markerStart: undefined });
+                break;
+              case 'open-arrow':
+                onUpdateEdge(edge.id, { markerEnd: { type: MarkerType.Arrow }, markerStart: undefined });
+                break;
+              case 'hollow-diamond-arrow':
+                onUpdateEdge(edge.id, { markerStart: { type: 'diamond-open' as MarkerType, color: '#555' }, markerEnd: { type: MarkerType.Arrow } });
+                break;
+              case 'filled-diamond-arrow':
+                onUpdateEdge(edge.id, { markerStart: { type: 'diamond-filled' as MarkerType, color: '#555' }, markerEnd: { type: MarkerType.Arrow } });
+                break;
             }
           }}
         >
