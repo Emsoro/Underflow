@@ -410,6 +410,41 @@ const edgeTypeOptions = [
   { label: 'Straight', value: 'straight' },
 ];
 
+const edgeMarkerOptions = [
+  { label: 'None', value: '' },
+  { label: 'Filled Arrow', value: MarkerType.ArrowClosed },
+  { label: 'Open Arrow', value: MarkerType.Arrow },
+  { label: 'Filled Diamond', value: 'diamond-filled' },
+  { label: 'Open Diamond', value: 'diamond-open' },
+  { label: 'Filled Triangle', value: 'triangle-filled' },
+  { label: 'Open Triangle', value: 'triangle-open' },
+  { label: 'Circle', value: 'circle' },
+];
+
+function CustomMarkerDefs() {
+  return (
+    <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+      <defs>
+        <marker id="diamond-filled" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+          <path d="M0,6 L6,0 L12,6 L6,12 Z" fill="#555" />
+        </marker>
+        <marker id="diamond-open" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+          <path d="M0,6 L6,0 L12,6 L6,12 Z" fill="#fff" stroke="#555" strokeWidth="1.5" />
+        </marker>
+        <marker id="triangle-filled" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+          <path d="M0,1 L12,6 L0,11 Z" fill="#555" />
+        </marker>
+        <marker id="triangle-open" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+          <path d="M0,1 L12,6 L0,11 Z" fill="#fff" stroke="#555" strokeWidth="1.5" />
+        </marker>
+        <marker id="circle-marker" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="8" markerHeight="8" orient="auto">
+          <circle cx="6" cy="6" r="4" fill="#555" />
+        </marker>
+      </defs>
+    </svg>
+  );
+}
+
 // ---------- Property Panel ----------
 function PropertyPanel({
   selected,
@@ -671,13 +706,25 @@ function PropertyPanel({
         <label>Arrow</label>
         <select
           style={inputStyle}
-          value={(edge.markerEnd as { type: MarkerType })?.type ?? MarkerType.ArrowClosed}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-            onUpdateEdge(edge.id, { markerEnd: { type: e.target.value as MarkerType } })
-          }
+          value={(() => {
+            const me = edge.markerEnd as { type?: string } | undefined;
+            if (!me) return '';
+            if (me.type === MarkerType.ArrowClosed) return MarkerType.ArrowClosed;
+            if (me.type === MarkerType.Arrow) return MarkerType.Arrow;
+            return me.type ?? '';
+          })()}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+            const val = e.target.value;
+            if (!val) {
+              onUpdateEdge(edge.id, { markerEnd: undefined });
+            } else {
+              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType } });
+            }
+          }}
         >
-          <option value={MarkerType.ArrowClosed}>Filled Arrow</option>
-          <option value={MarkerType.Arrow}>Open Arrow</option>
+          {edgeMarkerOptions.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
       </div>
       <div style={fieldStyle}>
@@ -721,6 +768,7 @@ const FlowchartAppInner = () => {
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
+      if (selected?.type !== 'edge' || selected.id !== oldEdge.id) return;
       setEdges((eds) =>
         eds.map((e) =>
           e.id === oldEdge.id
@@ -729,7 +777,7 @@ const FlowchartAppInner = () => {
         )
       );
     },
-    [setEdges]
+    [setEdges, selected]
   );
 
   const onSelectionChange = useCallback(({ nodes: selNodes, edges: selEdges }: OnSelectionChangeParams) => {
@@ -1034,6 +1082,7 @@ const FlowchartAppInner = () => {
           style={{ margin: 0, padding: 0 }}
         >
           {bgVariant !== 'none' && <Background variant={bgVariant as BackgroundVariant} gap={bgGap} size={bgSize} />}
+          <CustomMarkerDefs />
           <MiniMap
             nodeColor={(n) => (n.data as NodeData)?.color || '#eee'}
             maskColor="rgba(0,0,0,0.1)"
