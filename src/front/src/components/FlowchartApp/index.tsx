@@ -377,9 +377,9 @@ const initialNodes: Node<NodeData>[] = [
 ];
 
 const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', type: 'editable', animated: true, label: 'next' },
-  { id: 'e1-3', source: '1', target: '3', type: 'editable', label: 'branch' },
-  { id: 'e3-4', source: '3', target: '4', type: 'editable', label: 'done' },
+  { id: 'e1-2', source: '1', target: '2', type: 'editable', animated: true, label: 'next', reconnectable: true },
+  { id: 'e1-3', source: '1', target: '3', type: 'editable', label: 'branch', reconnectable: true },
+  { id: 'e3-4', source: '3', target: '4', type: 'editable', label: 'done', reconnectable: true },
 ];
 
 // ---------- Node color options ----------
@@ -713,7 +713,20 @@ const FlowchartAppInner = () => {
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) =>
-        addEdge({ ...params, type: 'editable', markerEnd: { type: MarkerType.ArrowClosed } }, eds)
+        addEdge({ ...params, type: 'editable', markerEnd: { type: MarkerType.ArrowClosed }, reconnectable: true }, eds)
+      );
+    },
+    [setEdges]
+  );
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === oldEdge.id
+            ? { ...e, source: newConnection.source, target: newConnection.target, sourceHandle: newConnection.sourceHandle, targetHandle: newConnection.targetHandle }
+            : e
+        )
       );
     },
     [setEdges]
@@ -1006,6 +1019,9 @@ const FlowchartAppInner = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onReconnect={onReconnect}
+          defaultEdgeOptions={{ type: 'editable', reconnectable: true, markerEnd: { type: MarkerType.ArrowClosed } }}
+          connectionLineStyle={{ stroke: '#10b981', strokeWidth: 2 }}
           onSelectionChange={onSelectionChange}
           onInit={(instance) => {
             rfInstance.current = instance;
