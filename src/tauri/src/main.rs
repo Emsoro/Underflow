@@ -13,10 +13,10 @@ fn load_flowchart(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn save_file_dialog() -> Result<Option<String>, String> {
+fn save_file_dialog(default_name: String) -> Result<Option<String>, String> {
     let file = rfd::FileDialog::new()
-        .add_filter("Flowchart JSON", &["json"])
-        .set_file_name("flowchart.json")
+        .add_filter("UnderFlow", &["uflow"])
+        .set_file_name(&default_name)
         .save_file();
     Ok(file.map(|p| p.to_string_lossy().to_string()))
 }
@@ -24,7 +24,7 @@ fn save_file_dialog() -> Result<Option<String>, String> {
 #[tauri::command]
 fn open_file_dialog() -> Result<Option<String>, String> {
     let file = rfd::FileDialog::new()
-        .add_filter("Flowchart JSON", &["json"])
+        .add_filter("UnderFlow", &["uflow"])
         .pick_file();
     Ok(file.map(|p| p.to_string_lossy().to_string()))
 }

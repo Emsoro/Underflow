@@ -11,8 +11,8 @@ export async function loadFlowchart(path: string): Promise<string> {
 }
 
 /** Open a native save file dialog, returns selected path or null */
-export async function saveFileDialog(): Promise<string | null> {
-  const result = await invoke<string | null>('save_file_dialog');
+export async function saveFileDialog(defaultName: string): Promise<string | null> {
+  const result = await invoke<string | null>('save_file_dialog', { defaultName });
   return result;
 }
 

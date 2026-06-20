@@ -1,6 +1,7 @@
 import { useCallback, useState, useRef, useMemo, useEffect, createContext, useContext } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { saveFlowchart, loadFlowchart, saveFileDialog, openFileDialog, saveImageDialog, saveBinaryFile, saveTextFile, isTauri } from '../../lib/tauri';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
 import { toPng, toSvg } from 'html-to-image';
 import {
@@ -14,7 +15,6 @@ import {
   useNodesState,
   useEdgesState,
   Panel,
-  MarkerType,
   Handle,
   Position,
   BaseEdge,
@@ -42,6 +42,23 @@ type NodeData = {
   condition?: string;
   yesLabel?: string;
   noLabel?: string;
+};
+
+type EdgeMarkerType =
+  | 'none'
+  | 'open-arrow'
+  | 'filled-arrow'
+  | 'hollow-triangle'
+  | 'hollow-diamond'
+  | 'filled-diamond'
+  | 'hollow-diamond-arrow'
+  | 'filled-diamond-arrow';
+
+type EdgeLineStyle = 'solid' | 'dashed' | 'dotted';
+
+type EdgeData = {
+  markerType?: EdgeMarkerType;
+  lineStyle?: EdgeLineStyle;
 };
 
 // ---------- Custom Condition Node (Diamond) ----------
@@ -114,8 +131,139 @@ type SelectedElement =
   | { type: 'edge'; id: string }
   | null;
 
+// ---------- Arrow rendering helpers ----------
+function getSourceAngle(position?: Position): number {
+  // Direction the edge goes FROM the source handle
+  if (position) {
+    switch (position) {
+      case Position.Top: return -90;    // edge goes up from source top
+      case Position.Bottom: return 90;  // edge goes down from source bottom
+      case Position.Left: return 180;   // edge goes left from source left
+      case Position.Right: return 0;    // edge goes right from source right
+    }
+  }
+  return 0;
+}
+
+function getTargetAngle(position?: Position): number {
+  // Direction the arrow points when arriving at the target handle
+  if (position) {
+    switch (position) {
+      case Position.Top: return 90;    // arrow points down into target top
+      case Position.Bottom: return -90; // arrow points up into target bottom
+      case Position.Left: return 0;     // arrow points right into target left
+      case Position.Right: return 180;  // arrow points left into target right
+    }
+  }
+  return 0;
+}
+
+function renderEndMarker(targetX: number, targetY: number, angle: number, type: 'open-arrow' | 'filled-arrow' | 'hollow-triangle' | 'hollow-diamond' | 'filled-diamond', color: string) {
+  const size = 10;
+  // Offset diamond markers away from the handle so they aren't obscured
+  const isDiamond = type === 'hollow-diamond' || type === 'filled-diamond';
+  const offset = isDiamond ? 8 : 0;
+  const rad = (angle * Math.PI) / 180;
+  const ox = targetX - Math.cos(rad) * offset;
+  const oy = targetY - Math.sin(rad) * offset;
+  const transform = `translate(${ox}, ${oy}) rotate(${angle})`;
+
+  switch (type) {
+    case 'open-arrow':
+      return (
+        <polygon
+          points={`0,0 ${-size},${-size * 0.5} ${-size},${size * 0.5}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+    case 'filled-arrow':
+      return (
+        <polygon
+          points={`0,0 ${-size},${-size * 0.5} ${-size},${size * 0.5}`}
+          fill={color}
+          stroke={color}
+          strokeWidth={1}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+    case 'hollow-triangle':
+      return (
+        <polygon
+          points={`0,0 ${-size * 1.2},${-size * 0.6} ${-size * 1.2},${size * 0.6}`}
+          fill="#fff"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+    case 'hollow-diamond':
+      return (
+        <polygon
+          points={`${size * 0.6},0 0,${-size * 0.5} ${-size * 0.6},0 0,${size * 0.5}`}
+          fill="#fff"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+    case 'filled-diamond':
+      return (
+        <polygon
+          points={`${size * 0.6},0 0,${-size * 0.5} ${-size * 0.6},0 0,${size * 0.5}`}
+          fill={color}
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+  }
+}
+
+function renderStartMarker(sourceX: number, sourceY: number, angle: number, type: 'hollow-diamond' | 'filled-diamond', color: string) {
+  const size = 10;
+  // Offset diamond markers away from the source handle
+  const offset = 8;
+  const rad = (angle * Math.PI) / 180;
+  const ox = sourceX + Math.cos(rad) * offset;
+  const oy = sourceY + Math.sin(rad) * offset;
+  const transform = `translate(${ox}, ${oy}) rotate(${angle})`;
+
+  switch (type) {
+    case 'hollow-diamond':
+      return (
+        <polygon
+          points={`${size * 0.6},0 0,${-size * 0.5} ${-size * 0.6},0 0,${size * 0.5}`}
+          fill="#fff"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+    case 'filled-diamond':
+      return (
+        <polygon
+          points={`${size * 0.6},0 0,${-size * 0.5} ${-size * 0.6},0 0,${size * 0.5}`}
+          fill={color}
+          stroke={color}
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          transform={transform}
+        />
+      );
+  }
+}
+
 // ---------- Editable Edge (double-click label to edit) ----------
-function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, markerEnd, style }: EdgeProps) {
+function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, style, data }: EdgeProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState((label as string) ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -130,13 +278,39 @@ function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
     window.dispatchEvent(new CustomEvent('edge-label-update', { detail: { id, label: text } }));
   };
 
+  const markerType = (data as EdgeData)?.markerType ?? 'open-arrow';
+  const lineStyle = (data as EdgeData)?.lineStyle ?? 'solid';
+  const edgeColor = selected ? '#2196F3' : (style?.stroke as string) || '#555';
+  const endAngle = getTargetAngle(targetPosition);
+  const startAngle = getSourceAngle(sourcePosition);
+
+  const dashArray = lineStyle === 'dashed' ? '8,4' : lineStyle === 'dotted' ? '2,4' : undefined;
+
+  // Determine what markers to render
+  let endMarkerType: 'open-arrow' | 'filled-arrow' | 'hollow-triangle' | 'hollow-diamond' | 'filled-diamond' | null = null;
+  let startMarkerType: 'hollow-diamond' | 'filled-diamond' | null = null;
+
+  switch (markerType) {
+    case 'open-arrow': endMarkerType = 'open-arrow'; break;
+    case 'filled-arrow': endMarkerType = 'filled-arrow'; break;
+    case 'hollow-triangle': endMarkerType = 'hollow-triangle'; break;
+    case 'hollow-diamond': endMarkerType = 'hollow-diamond'; break;
+    case 'filled-diamond': endMarkerType = 'filled-diamond'; break;
+    case 'hollow-diamond-arrow': startMarkerType = 'hollow-diamond'; endMarkerType = 'open-arrow'; break;
+    case 'filled-diamond-arrow': startMarkerType = 'filled-diamond'; endMarkerType = 'open-arrow'; break;
+  }
+
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{
+      <BaseEdge path={edgePath} style={{
         ...style,
-        stroke: selected ? '#2196F3' : (style?.stroke as string) || '#555',
+        stroke: edgeColor,
         strokeWidth: selected ? 2 : 1.5,
+        strokeDasharray: dashArray,
       }} />
+      {/* Render markers as SVG shapes */}
+      {endMarkerType && renderEndMarker(targetX, targetY, endAngle, endMarkerType, edgeColor)}
+      {startMarkerType && renderStartMarker(sourceX, sourceY, startAngle, startMarkerType, edgeColor)}
       <EdgeLabelRenderer>
         <div style={{
           position: 'absolute',
@@ -412,62 +586,14 @@ const edgeTypeOptions = [
 
 const edgeMarkerOptions = [
   { label: 'None', value: 'none' },
-  { label: 'Filled Arrow', value: 'filled-arrow' },
-  { label: 'Hollow Arrow', value: 'hollow-arrow' },
-  { label: 'Open Arrow', value: 'open-arrow' },
-  { label: 'Hollow Diamond + Open Arrow', value: 'hollow-diamond-arrow' },
-  { label: 'Filled Diamond + Open Arrow', value: 'filled-diamond-arrow' },
+  { label: 'Open Arrow (Association)', value: 'open-arrow' },
+  { label: 'Filled Arrow (Navigable)', value: 'filled-arrow' },
+  { label: 'Hollow Triangle (Generalization)', value: 'hollow-triangle' },
+  { label: 'Hollow Diamond (Aggregation)', value: 'hollow-diamond' },
+  { label: 'Filled Diamond (Composition)', value: 'filled-diamond' },
+  { label: 'Hollow Diamond + Arrow', value: 'hollow-diamond-arrow' },
+  { label: 'Filled Diamond + Arrow', value: 'filled-diamond-arrow' },
 ];
-
-function useInjectCustomMarkers(edges: Edge[]) {
-  useEffect(() => {
-    const tryInject = () => {
-      const svg = document.querySelector('.react-flow svg');
-      if (!svg) return;
-      const existingMarker = svg.querySelector('marker[id]');
-      if (!existingMarker) return;
-      const rfId = existingMarker.id.split('__')[0];
-      if (!rfId) return;
-      let defs = svg.querySelector('defs.custom-markers');
-      if (!defs) {
-        defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        defs.setAttribute('class', 'custom-markers');
-        svg.prepend(defs);
-      }
-      const markers = [
-        { id: `${rfId}__color=none&type=hollow-arrow`, path: 'M-5,-4 0,0 -5,4', fill: 'none', stroke: '#555', refX: 0 },
-        { id: `${rfId}__color=none&type=diamond-open`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: 'none', stroke: '#555', refX: 6 },
-        { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: '#555', stroke: '', refX: 6 },
-      ];
-      markers.forEach((m) => {
-        if (defs.querySelector(`[id="${m.id}"]`)) return;
-        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        marker.setAttribute('id', m.id);
-        marker.setAttribute('viewBox', '-10 -10 20 20');
-        marker.setAttribute('refX', String(m.refX));
-        marker.setAttribute('refY', '0');
-        marker.setAttribute('markerWidth', '12.5');
-        marker.setAttribute('markerHeight', '12.5');
-        marker.setAttribute('markerUnits', 'strokeWidth');
-        marker.setAttribute('orient', 'auto-start-reverse');
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', m.path);
-        path.setAttribute('fill', m.fill);
-        path.setAttribute('stroke-linecap', 'round');
-        path.setAttribute('stroke-linejoin', 'round');
-        if (m.stroke) {
-          path.setAttribute('stroke', m.stroke);
-          path.setAttribute('stroke-width', '1.5');
-        }
-        marker.appendChild(path);
-        defs.appendChild(marker);
-      });
-    };
-    tryInject();
-    const t = setTimeout(tryInject, 200);
-    return () => clearTimeout(t);
-  }, [edges]);
-}
 
 // ---------- Property Panel ----------
 function PropertyPanel({
@@ -730,46 +856,28 @@ function PropertyPanel({
         <label>Arrow</label>
         <select
           style={inputStyle}
-          value={(() => {
-            const me = edge.markerEnd as { type?: string } | undefined;
-            const ms = edge.markerStart as { type?: string } | undefined;
-            if (!me && !ms) return 'none';
-            if (ms && me) {
-              if (ms.type?.includes('diamond-open') && me.type === MarkerType.Arrow) return 'hollow-diamond-arrow';
-              if (ms.type?.includes('diamond-filled') && me.type === MarkerType.Arrow) return 'filled-diamond-arrow';
-            }
-            if (me?.type === MarkerType.ArrowClosed) return 'filled-arrow';
-            if (me?.type === 'hollow-arrow') return 'hollow-arrow';
-            if (me?.type === MarkerType.Arrow) return 'open-arrow';
-            return 'none';
-          })()}
+          value={(edge.data as EdgeData)?.markerType ?? 'open-arrow'}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-            const val = e.target.value;
-            switch (val) {
-              case 'none':
-                onUpdateEdge(edge.id, { markerEnd: undefined, markerStart: undefined });
-                break;
-              case 'filled-arrow':
-                onUpdateEdge(edge.id, { markerEnd: { type: MarkerType.ArrowClosed }, markerStart: undefined });
-                break;
-              case 'hollow-arrow':
-                onUpdateEdge(edge.id, { markerEnd: { type: 'hollow-arrow' as MarkerType, color: '#555' }, markerStart: undefined });
-                break;
-              case 'open-arrow':
-                onUpdateEdge(edge.id, { markerEnd: { type: MarkerType.Arrow }, markerStart: undefined });
-                break;
-              case 'hollow-diamond-arrow':
-                onUpdateEdge(edge.id, { markerStart: { type: 'diamond-open' as MarkerType, color: '#555' }, markerEnd: { type: MarkerType.Arrow } });
-                break;
-              case 'filled-diamond-arrow':
-                onUpdateEdge(edge.id, { markerStart: { type: 'diamond-filled' as MarkerType, color: '#555' }, markerEnd: { type: MarkerType.Arrow } });
-                break;
-            }
+            onUpdateEdge(edge.id, { data: { ...edge.data, markerType: e.target.value } });
           }}
         >
           {edgeMarkerOptions.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
+        </select>
+      </div>
+      <div style={fieldStyle}>
+        <label>Line</label>
+        <select
+          style={inputStyle}
+          value={(edge.data as EdgeData)?.lineStyle ?? 'solid'}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+            onUpdateEdge(edge.id, { data: { ...edge.data, lineStyle: e.target.value } });
+          }}
+        >
+          <option value="solid">Solid</option>
+          <option value="dashed">Dashed</option>
+          <option value="dotted">Dotted</option>
         </select>
       </div>
       <div style={fieldStyle}>
@@ -801,12 +909,45 @@ const FlowchartAppInner = () => {
   const [bgSize, setBgSize] = useState(1);
   const rfInstance = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  useInjectCustomMarkers(edges);
+
+  // File state
+  const [filePath, setFilePath] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const isDirtyRef = useRef(false);
+  const skipDirtyRef = useRef(true); // skip initial render
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // Auto-hide save notification
+  useEffect(() => {
+    if (!saveMsg) return;
+    const timer = setTimeout(() => setSaveMsg(null), 3000);
+    return () => clearTimeout(timer);
+  }, [saveMsg]);
+
+  // Track changes to mark dirty
+  useEffect(() => {
+    if (skipDirtyRef.current) { skipDirtyRef.current = false; return; }
+    setIsDirty(true);
+    isDirtyRef.current = true;
+  }, [nodes]);
+  useEffect(() => {
+    if (skipDirtyRef.current) { skipDirtyRef.current = false; return; }
+    setIsDirty(true);
+    isDirtyRef.current = true;
+  }, [edges]);
+
+  // Update window title
+  useEffect(() => {
+    if (!isTauri()) return;
+    const fileName = filePath ? filePath.split(/[\\/]/).pop() : '未命名';
+    getCurrentWindow().setTitle(`${fileName} - UnderFlow`);
+  }, [filePath, isDirty, lastSavedTime]);
 
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) =>
-        addEdge({ ...params, type: 'editable', markerEnd: { type: MarkerType.ArrowClosed }, reconnectable: true }, eds)
+        addEdge({ ...params, type: 'editable', data: { markerType: 'open-arrow' as EdgeMarkerType }, reconnectable: true }, eds)
       );
     },
     [setEdges]
@@ -981,18 +1122,96 @@ const FlowchartAppInner = () => {
   }, [nodes, edges, elk, setNodes, setEdges]);
 
   // Save / Open flowchart JSON (Tauri)
+  const doSave = useCallback(async (path: string) => {
+    const flowData = JSON.stringify({ nodes, edges }, null, 2);
+    await saveFlowchart(path, flowData);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    setFilePath(path);
+    setIsDirty(false);
+    isDirtyRef.current = false;
+    setLastSavedTime(timeStr);
+    skipDirtyRef.current = true; // prevent save from triggering dirty
+    // Show save success notification
+    const fileName = path.split(/[\\/]/).pop() ?? path;
+    setSaveMsg(`保存成功 ${fileName} (${timeStr})`);
+  }, [nodes, edges]);
+
+  const getDefaultFileName = useCallback(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const h = String(now.getHours()).padStart(2, '0');
+    const mi = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    return `flow_${y}${m}${d}_${h}${mi}${s}.uflow`;
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!isTauri()) { alert('Save is only available in the desktop app.'); return; }
     try {
-      const path = await saveFileDialog();
-      if (!path) return;
-      const flowData = JSON.stringify({ nodes, edges }, null, 2);
-      await saveFlowchart(path, flowData);
+      if (filePath) {
+        await doSave(filePath);
+      } else {
+        const path = await saveFileDialog(getDefaultFileName());
+        if (!path) return;
+        await doSave(path);
+      }
     } catch (err) {
       console.error('Save failed:', err);
-      alert('Failed to save flowchart.');
+      alert('保存失败');
     }
-  }, [nodes, edges]);
+  }, [filePath, doSave, getDefaultFileName]);
+
+  const handleSaveAs = useCallback(async () => {
+    if (!isTauri()) { alert('Save is only available in the desktop app.'); return; }
+    try {
+      const path = await saveFileDialog(getDefaultFileName());
+      if (!path) return;
+      await doSave(path);
+    } catch (err) {
+      console.error('Save As failed:', err);
+      alert('保存失败');
+    }
+  }, [doSave, getDefaultFileName]);
+
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Shift+S save as
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'S') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleSaveAs();
+        } else {
+          e.preventDefault();
+          handleSave();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSave, handleSaveAs]);
+
+  // Auto-save every 60 seconds
+  useEffect(() => {
+    if (!isTauri()) return;
+    const timer = setInterval(() => {
+      if (isDirtyRef.current && filePath) {
+        const flowData = JSON.stringify({ nodes, edges }, null, 2);
+        saveFlowchart(filePath, flowData).then(() => {
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+          setIsDirty(false);
+          isDirtyRef.current = false;
+          setLastSavedTime(timeStr);
+        }).catch((err) => {
+          console.error('Auto-save failed:', err);
+        });
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [filePath, nodes, edges]);
 
   const handleOpen = useCallback(async () => {
     if (!isTauri()) { alert('Open is only available in the desktop app.'); return; }
@@ -1001,8 +1220,13 @@ const FlowchartAppInner = () => {
       if (!path) return;
       const raw = await loadFlowchart(path);
       const parsed = JSON.parse(raw);
+      skipDirtyRef.current = true;
       if (Array.isArray(parsed.nodes)) setNodes(parsed.nodes);
       if (Array.isArray(parsed.edges)) setEdges(parsed.edges);
+      setFilePath(path);
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      setLastSavedTime(null);
     } catch (err) {
       console.error('Open failed:', err);
       alert('Failed to open flowchart.');
@@ -1114,7 +1338,7 @@ const FlowchartAppInner = () => {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onReconnect={onReconnect}
-          defaultEdgeOptions={{ type: 'editable', reconnectable: true, markerEnd: { type: MarkerType.ArrowClosed } }}
+          defaultEdgeOptions={{ type: 'editable', reconnectable: true, data: { markerType: 'open-arrow' as EdgeMarkerType } }}
           connectionLineStyle={{ stroke: '#10b981', strokeWidth: 2 }}
           onSelectionChange={onSelectionChange}
           onInit={(instance) => {
@@ -1304,6 +1528,18 @@ const FlowchartAppInner = () => {
           </div>
         )}
       </div>
+      {/* Save success notification */}
+      {saveMsg && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1e293b', color: '#fff', padding: '10px 24px',
+          borderRadius: 8, fontSize: 14, fontWeight: 500,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)', zIndex: 9999,
+          transition: 'opacity 300ms ease',
+        }}>
+          {saveMsg}
+        </div>
+      )}
     </div>
     </EdgesContext.Provider>
   );
