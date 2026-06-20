@@ -421,10 +421,13 @@ const edgeMarkerOptions = [
 ];
 
 function useInjectCustomMarkers() {
-  const { rfId } = useReactFlow();
   useEffect(() => {
     const svg = document.querySelector('.react-flow svg');
     if (!svg) return;
+    const existingMarker = svg.querySelector('marker[id]');
+    if (!existingMarker) return;
+    const rfId = existingMarker.id.split('__')[0];
+    if (!rfId) return;
     let defs = svg.querySelector('defs.custom-markers');
     if (!defs) {
       defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -432,11 +435,11 @@ function useInjectCustomMarkers() {
       svg.prepend(defs);
     }
     const markers = [
-      { id: `${rfId}__type=diamond-filled&color=%23555`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#555', refX: 10, refY: 6, w: 12, h: 12 },
-      { id: `${rfId}__color=%23fff&type=diamond-open`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#fff', stroke: '#555', refX: 10, refY: 6, w: 12, h: 12 },
-      { id: `${rfId}__type=triangle-filled&color=%23555`, path: 'M0,1 L12,6 L0,11 Z', fill: '#555', refX: 11, refY: 6, w: 12, h: 12 },
-      { id: `${rfId}__color=%23fff&type=triangle-open`, path: 'M0,1 L12,6 L0,11 Z', fill: '#fff', stroke: '#555', refX: 11, refY: 6, w: 12, h: 12 },
-      { id: `${rfId}__type=circle&color=%23555`, path: '', fill: '#555', refX: 6, refY: 6, w: 8, h: 8, circle: true },
+      { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#555', refX: 10, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=#fff&type=diamond-open`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#fff', stroke: '#555', refX: 10, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=#555&type=triangle-filled`, path: 'M0,1 L12,6 L0,11 Z', fill: '#555', refX: 11, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=#fff&type=triangle-open`, path: 'M0,1 L12,6 L0,11 Z', fill: '#fff', stroke: '#555', refX: 11, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=#555&type=circle`, path: '', fill: '#555', refX: 6, refY: 6, w: 8, h: 8, circle: true },
     ];
     markers.forEach((m) => {
       if (defs.querySelector(`#${CSS.escape(m.id)}`)) return;
@@ -467,7 +470,7 @@ function useInjectCustomMarkers() {
       }
       defs.appendChild(marker);
     });
-  }, [rfId]);
+  }, []);
 }
 
 // ---------- Property Panel ----------
@@ -739,9 +742,9 @@ function PropertyPanel({
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
             const val = e.target.value;
             if (val === MarkerType.ArrowClosed || val === MarkerType.Arrow) {
-              onUpdateEdge(edge.id, { markerEnd: { type: val } });
+              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType } });
             } else {
-              onUpdateEdge(edge.id, { markerEnd: { type: val, color: '#555' } });
+              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType, color: '#555' } });
             }
           }}
         >
@@ -777,9 +780,9 @@ const FlowchartAppInner = () => {
   const [bgVariant, setBgVariant] = useState<string>(BackgroundVariant.Dots);
   const [bgGap, setBgGap] = useState(20);
   const [bgSize, setBgSize] = useState(1);
-  useInjectCustomMarkers();
   const rfInstance = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  useInjectCustomMarkers();
 
   const onConnect = useCallback(
     (params: Connection) => {
