@@ -955,7 +955,6 @@ const FlowchartAppInner = () => {
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
-      if (selected?.type !== 'edge' || selected.id !== oldEdge.id) return;
       setEdges((eds) =>
         eds.map((e) =>
           e.id === oldEdge.id
@@ -964,7 +963,7 @@ const FlowchartAppInner = () => {
         )
       );
     },
-    [setEdges, selected]
+    [setEdges]
   );
 
   const onSelectionChange = useCallback(({ nodes: selNodes, edges: selEdges }: OnSelectionChangeParams) => {
