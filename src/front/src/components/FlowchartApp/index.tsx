@@ -411,7 +411,6 @@ const edgeTypeOptions = [
 ];
 
 const edgeMarkerOptions = [
-  { label: 'None', value: '' },
   { label: 'Filled Arrow', value: MarkerType.ArrowClosed },
   { label: 'Open Arrow', value: MarkerType.Arrow },
   { label: 'Filled Diamond', value: 'diamond-filled' },
@@ -421,28 +420,54 @@ const edgeMarkerOptions = [
   { label: 'Circle', value: 'circle' },
 ];
 
-function CustomMarkerDefs() {
-  return (
-    <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-      <defs>
-        <marker id="diamond-filled" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-          <path d="M0,6 L6,0 L12,6 L6,12 Z" fill="#555" />
-        </marker>
-        <marker id="diamond-open" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-          <path d="M0,6 L6,0 L12,6 L6,12 Z" fill="#fff" stroke="#555" strokeWidth="1.5" />
-        </marker>
-        <marker id="triangle-filled" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-          <path d="M0,1 L12,6 L0,11 Z" fill="#555" />
-        </marker>
-        <marker id="triangle-open" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
-          <path d="M0,1 L12,6 L0,11 Z" fill="#fff" stroke="#555" strokeWidth="1.5" />
-        </marker>
-        <marker id="circle-marker" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="8" markerHeight="8" orient="auto">
-          <circle cx="6" cy="6" r="4" fill="#555" />
-        </marker>
-      </defs>
-    </svg>
-  );
+function useInjectCustomMarkers() {
+  const { rfId } = useReactFlow();
+  useEffect(() => {
+    const svg = document.querySelector('.react-flow svg');
+    if (!svg) return;
+    let defs = svg.querySelector('defs.custom-markers');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      defs.setAttribute('class', 'custom-markers');
+      svg.prepend(defs);
+    }
+    const markers = [
+      { id: `${rfId}__type=diamond-filled&color=%23555`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#555', refX: 10, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=%23fff&type=diamond-open`, path: 'M0,6 L6,0 L12,6 L6,12 Z', fill: '#fff', stroke: '#555', refX: 10, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__type=triangle-filled&color=%23555`, path: 'M0,1 L12,6 L0,11 Z', fill: '#555', refX: 11, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__color=%23fff&type=triangle-open`, path: 'M0,1 L12,6 L0,11 Z', fill: '#fff', stroke: '#555', refX: 11, refY: 6, w: 12, h: 12 },
+      { id: `${rfId}__type=circle&color=%23555`, path: '', fill: '#555', refX: 6, refY: 6, w: 8, h: 8, circle: true },
+    ];
+    markers.forEach((m) => {
+      if (defs.querySelector(`#${CSS.escape(m.id)}`)) return;
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', m.id);
+      marker.setAttribute('viewBox', `0 0 ${m.w} ${m.h}`);
+      marker.setAttribute('refX', String(m.refX));
+      marker.setAttribute('refY', String(m.refY));
+      marker.setAttribute('markerWidth', String(m.w));
+      marker.setAttribute('markerHeight', String(m.h));
+      marker.setAttribute('orient', 'auto-start-reverse');
+      if (m.circle) {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '6');
+        circle.setAttribute('cy', '6');
+        circle.setAttribute('r', '4');
+        circle.setAttribute('fill', m.fill);
+        marker.appendChild(circle);
+      } else {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', m.path);
+        path.setAttribute('fill', m.fill);
+        if (m.stroke) {
+          path.setAttribute('stroke', m.stroke);
+          path.setAttribute('stroke-width', '1.5');
+        }
+        marker.appendChild(path);
+      }
+      defs.appendChild(marker);
+    });
+  }, [rfId]);
 }
 
 // ---------- Property Panel ----------
@@ -708,17 +733,15 @@ function PropertyPanel({
           style={inputStyle}
           value={(() => {
             const me = edge.markerEnd as { type?: string } | undefined;
-            if (!me) return '';
-            if (me.type === MarkerType.ArrowClosed) return MarkerType.ArrowClosed;
-            if (me.type === MarkerType.Arrow) return MarkerType.Arrow;
-            return me.type ?? '';
+            if (!me) return MarkerType.ArrowClosed;
+            return me.type ?? MarkerType.ArrowClosed;
           })()}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
             const val = e.target.value;
-            if (!val) {
-              onUpdateEdge(edge.id, { markerEnd: undefined });
+            if (val === MarkerType.ArrowClosed || val === MarkerType.Arrow) {
+              onUpdateEdge(edge.id, { markerEnd: { type: val } });
             } else {
-              onUpdateEdge(edge.id, { markerEnd: { type: val as MarkerType } });
+              onUpdateEdge(edge.id, { markerEnd: { type: val, color: '#555' } });
             }
           }}
         >
@@ -754,6 +777,7 @@ const FlowchartAppInner = () => {
   const [bgVariant, setBgVariant] = useState<string>(BackgroundVariant.Dots);
   const [bgGap, setBgGap] = useState(20);
   const [bgSize, setBgSize] = useState(1);
+  useInjectCustomMarkers();
   const rfInstance = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -1082,7 +1106,6 @@ const FlowchartAppInner = () => {
           style={{ margin: 0, padding: 0 }}
         >
           {bgVariant !== 'none' && <Background variant={bgVariant as BackgroundVariant} gap={bgGap} size={bgSize} />}
-          <CustomMarkerDefs />
           <MiniMap
             nodeColor={(n) => (n.data as NodeData)?.color || '#eee'}
             maskColor="rgba(0,0,0,0.1)"
