@@ -418,7 +418,6 @@ const edgeMarkerOptions = [
   { label: 'Open Diamond', value: 'diamond-open' },
   { label: 'Filled Triangle', value: 'triangle-filled' },
   { label: 'Open Triangle', value: 'triangle-open' },
-  { label: 'Circle', value: 'circle' },
 ];
 
 function useInjectCustomMarkers(edges: Edge[]) {
@@ -437,42 +436,32 @@ function useInjectCustomMarkers(edges: Edge[]) {
         svg.prepend(defs);
       }
       const markers = [
-        { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,-5 L5,0 L0,5 L-5,0 Z', fill: '#555', stroke: '' },
-        { id: `${rfId}__color=#fff&type=diamond-open`, path: 'M0,-5 L5,0 L0,5 L-5,0 Z', fill: '#fff', stroke: '#555' },
-        { id: `${rfId}__color=#555&type=triangle-filled`, path: 'M-5,-5 L5,0 L-5,5 Z', fill: '#555', stroke: '' },
-        { id: `${rfId}__color=#fff&type=triangle-open`, path: 'M-5,-5 L5,0 L-5,5 Z', fill: '#fff', stroke: '#555' },
-        { id: `${rfId}__color=#555&type=circle`, path: '', fill: '#555', stroke: '', circle: true },
+        { id: `${rfId}__color=#555&type=diamond-filled`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: '#555', stroke: '', refX: 6 },
+        { id: `${rfId}__color=none&type=diamond-open`, path: 'M0,-6 L6,0 L0,6 L-6,0 Z', fill: 'none', stroke: '#555', refX: 6 },
+        { id: `${rfId}__color=#555&type=triangle-filled`, path: 'M-6,-6 L6,0 L-6,6 Z', fill: '#555', stroke: '', refX: 5 },
+        { id: `${rfId}__color=none&type=triangle-open`, path: 'M-6,-6 L6,0 L-6,6 Z', fill: 'none', stroke: '#555', refX: 5 },
       ];
       markers.forEach((m) => {
         if (defs.querySelector(`[id="${m.id}"]`)) return;
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', m.id);
         marker.setAttribute('viewBox', '-10 -10 20 20');
-        marker.setAttribute('refX', '0');
+        marker.setAttribute('refX', String(m.refX));
         marker.setAttribute('refY', '0');
         marker.setAttribute('markerWidth', '12.5');
         marker.setAttribute('markerHeight', '12.5');
         marker.setAttribute('markerUnits', 'strokeWidth');
         marker.setAttribute('orient', 'auto-start-reverse');
-        if (m.circle) {
-          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          circle.setAttribute('cx', '0');
-          circle.setAttribute('cy', '0');
-          circle.setAttribute('r', '4');
-          circle.setAttribute('fill', m.fill);
-          marker.appendChild(circle);
-        } else {
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path.setAttribute('d', m.path);
-          path.setAttribute('fill', m.fill);
-          path.setAttribute('stroke-linecap', 'round');
-          path.setAttribute('stroke-linejoin', 'round');
-          if (m.stroke) {
-            path.setAttribute('stroke', m.stroke);
-            path.setAttribute('stroke-width', '1.5');
-          }
-          marker.appendChild(path);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', m.path);
+        path.setAttribute('fill', m.fill);
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        if (m.stroke) {
+          path.setAttribute('stroke', m.stroke);
+          path.setAttribute('stroke-width', '1.5');
         }
+        marker.appendChild(path);
         defs.appendChild(marker);
       });
     };
