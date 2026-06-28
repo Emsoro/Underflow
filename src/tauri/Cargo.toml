@@ -1,6 +1,6 @@
 [package]
-name = "Underflow"
-version = "1.0.0"
+name = "UnderFlow"
+version = "1.1.0"
 edition = "2021"
 description = "A modern flowchart editor"
 license = "MIT"
@@ -12,6 +12,12 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rfd = "0.15"
+license-verify = { path = "./src/rustsdk" }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+sha2 = "0.10"
+base64 = "0.22"
+dirs = "5"
+winreg = "0.52"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

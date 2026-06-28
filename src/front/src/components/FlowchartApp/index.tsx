@@ -1,9 +1,11 @@
 import { useCallback, useState, useRef, useMemo, useEffect, createContext, useContext } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
-import { saveFlowchart, loadFlowchart, saveFileDialog, openFileDialog, saveImageDialog, saveBinaryFile, saveTextFile, isTauri } from '../../lib/tauri';
+import { saveFlowchart, loadFlowchart, saveFileDialog, openFileDialog, saveImageDialog, saveBinaryFile, saveTextFile, isTauri, getLicenseStatus, openExternalUrl } from '../../lib/tauri';
+import type { LicenseStatus } from '../../lib/tauri';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
 import { toPng, toSvg } from 'html-to-image';
+import RegistrationDialog from './RegistrationDialog';
 import {
   ReactFlow,
   MiniMap,
@@ -65,10 +67,12 @@ type EdgeData = {
 function ConditionNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
   const edges = useContext(EdgesContext);
+  const handleStyleType = useContext(HandleStyleContext);
   const [hovered, setHovered] = useState(false);
   const hs = (handleId: string | null | undefined, type: 'source' | 'target'): React.CSSProperties => {
-    if (isHandleConnected(edges, id, handleId, type)) return handleVisibleStyle;
-    return hovered ? handleVisibleStyle : handleStyle;
+    const base = getHandleStyleCSS(handleStyleType);
+    if (isHandleConnected(edges, id, handleId, type)) return { ...base, opacity: 1 };
+    return hovered ? { ...base, opacity: 1 } : base;
   };
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
@@ -355,9 +359,195 @@ function EditableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
   );
 }
 
+// ---------- IndexedDB helpers ----------
+const DB_NAME = 'UnderFlowSettings';
+const DB_VERSION = 1;
+const STORE_NAME = 'settings';
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function loadSettings<T>(key: string, defaultValue: T): Promise<T> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result ?? defaultValue);
+      req.onerror = () => resolve(defaultValue);
+    });
+  } catch {
+    return defaultValue;
+  }
+}
+
+async function saveSettings<T>(key: string, value: T): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.put(value, key);
+  } catch {}
+}
+
+// ---------- Translations ----------
+type Lang = 'en' | 'zh';
+const translations = {
+  en: {
+    background: 'Background',
+    pattern: 'Pattern',
+    dots: 'Dots',
+    lines: 'Lines',
+    cross: 'Cross',
+    none: 'None',
+    gap: 'Gap',
+    size: 'Size',
+    nodeHandleStyle: 'Node Handle Style',
+    solidBlack: 'Solid Black',
+    hollowBlack: 'Hollow Black',
+    lightGray: 'Light Gray',
+    language: 'Language',
+    nodeProperties: 'Node Properties',
+    edgeProperties: 'Edge Properties',
+    label: 'Label',
+    shape: 'Shape',
+    rectangle: 'Rectangle',
+    diamond: 'Diamond',
+    borderStyle: 'Border Style',
+    solid: 'Solid',
+    dashed: 'Dashed',
+    color: 'Color',
+    type: 'Type',
+    arrow: 'Arrow',
+    line: 'Line',
+    dotted: 'Dotted',
+    animated: 'Animated',
+    save: 'Save',
+    open: 'Open',
+    layout: 'Layout',
+    start: 'Start',
+    node: 'Node',
+    end: 'End',
+    saveSuccess: 'Saved',
+    saveFail: 'Save failed',
+    saveOnlyDesktop: 'Save is only available in the desktop app.',
+    openOnlyDesktop: 'Open is only available in the desktop app.',
+    exportSvgFail: 'Export SVG failed',
+    exportPngFail: 'Export PNG failed',
+    license: 'License',
+    registerActivate: 'Register / Activate',
+    registeredVersion: 'Registered',
+    days: 'days',
+    edgeDefault: 'Default',
+    edgeSmoothStep: 'Smooth Step',
+    edgeStep: 'Step',
+    edgeStraight: 'Straight',
+    markerNone: 'None',
+    markerOpenArrow: 'Open Arrow (Association)',
+    markerFilledArrow: 'Filled Arrow (Navigable)',
+    markerHollowTriangle: 'Hollow Triangle (Generalization)',
+    markerHollowDiamond: 'Hollow Diamond (Aggregation)',
+    markerFilledDiamond: 'Filled Diamond (Composition)',
+    markerHollowDiamondArrow: 'Hollow Diamond + Arrow',
+    markerFilledDiamondArrow: 'Filled Diamond + Arrow',
+    exportWatermark: 'Export Watermark',
+    aboutUs: 'About Us',
+  },
+  zh: {
+    background: '背景',
+    pattern: '图案',
+    dots: '点阵',
+    lines: '线条',
+    cross: '十字',
+    none: '无',
+    gap: '间距',
+    size: '大小',
+    nodeHandleStyle: '节点连接点样式',
+    solidBlack: '黑色实心',
+    hollowBlack: '黑色空心',
+    lightGray: '浅白灰',
+    language: '语言',
+    nodeProperties: '节点属性',
+    edgeProperties: '连线属性',
+    label: '标签',
+    shape: '形状',
+    rectangle: '矩形',
+    diamond: '菱形',
+    borderStyle: '边框样式',
+    solid: '实线',
+    dashed: '虚线',
+    color: '颜色',
+    type: '类型',
+    arrow: '箭头',
+    line: '线条',
+    dotted: '点线',
+    animated: '动画',
+    save: '保存',
+    open: '打开',
+    layout: '布局',
+    start: '开始',
+    node: '节点',
+    end: '结束',
+    saveSuccess: '保存成功',
+    saveFail: '保存失败',
+    saveOnlyDesktop: '保存功能仅在桌面应用中可用。',
+    openOnlyDesktop: '打开功能仅在桌面应用中可用。',
+    exportSvgFail: '导出 SVG 失败',
+    exportPngFail: '导出 PNG 失败',
+    license: '授权',
+    registerActivate: '注册 / 激活',
+    registeredVersion: '注册版',
+    days: '天',
+    edgeDefault: '默认',
+    edgeSmoothStep: '平滑阶梯',
+    edgeStep: '阶梯',
+    edgeStraight: '直线',
+    markerNone: '无',
+    markerOpenArrow: '开放箭头 (关联)',
+    markerFilledArrow: '实心箭头 (可导航)',
+    markerHollowTriangle: '空心三角 (泛化)',
+    markerHollowDiamond: '空心菱形 (聚合)',
+    markerFilledDiamond: '实心菱形 (组合)',
+    markerHollowDiamondArrow: '空心菱形 + 箭头',
+    markerFilledDiamondArrow: '实心菱形 + 箭头',
+    exportWatermark: '导出水印',
+    aboutUs: '关于我们',
+  },
+} as const;
+
+type HandleStyleType = 'solid-black' | 'hollow-black' | 'light-gray';
+
+function useT() {
+  const lang = useContext(LangContext);
+  return useCallback((key: keyof typeof translations.en): string => {
+    return translations[lang][key];
+  }, [lang]);
+}
+
 // ---------- Custom Flow Node (with 4 handles: top/right/bottom/left) ----------
-const handleStyle: React.CSSProperties = { width: 8, height: 8, background: '#555', border: '2px solid #fff', opacity: 0, transition: 'opacity 150ms ease' };
-const handleVisibleStyle: React.CSSProperties = { ...handleStyle, opacity: 1 };
+const HandleStyleContext = createContext<HandleStyleType>('solid-black');
+const LangContext = createContext<Lang>('en');
+
+function getHandleStyleCSS(type: HandleStyleType): React.CSSProperties {
+  switch (type) {
+    case 'hollow-black':
+      return { width: 6, height: 6, background: '#fff', border: '1.5px solid #333', opacity: 0, transition: 'opacity 150ms ease' };
+    case 'light-gray':
+      return { width: 8, height: 8, background: '#e2e8f0', border: '2px solid #fff', opacity: 0, transition: 'opacity 150ms ease' };
+    case 'solid-black':
+    default:
+      return { width: 8, height: 8, background: '#333', border: '2px solid #fff', opacity: 0, transition: 'opacity 150ms ease' };
+  }
+}
 
 const EdgesContext = createContext<Edge[]>([]);
 
@@ -396,10 +586,12 @@ function useInlineEdit(id: string, label: string | undefined) {
 function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
   const edges = useContext(EdgesContext);
+  const handleStyleType = useContext(HandleStyleContext);
   const [hovered, setHovered] = useState(false);
   const hs = (handleId: string | null | undefined, type: 'source' | 'target'): React.CSSProperties => {
-    if (isHandleConnected(edges, id, handleId, type)) return handleVisibleStyle;
-    return hovered ? handleVisibleStyle : handleStyle;
+    const base = getHandleStyleCSS(handleStyleType);
+    if (isHandleConnected(edges, id, handleId, type)) return { ...base, opacity: 1 };
+    return hovered ? { ...base, opacity: 1 } : base;
   };
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
@@ -443,10 +635,12 @@ function FlowNode({ id, data }: NodeProps<Node<NodeData>>) {
 function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
   const edges = useContext(EdgesContext);
+  const handleStyleType = useContext(HandleStyleContext);
   const [hovered, setHovered] = useState(false);
   const hs = (handleId: string | null | undefined, type: 'source' | 'target'): React.CSSProperties => {
-    if (isHandleConnected(edges, id, handleId, type)) return handleVisibleStyle;
-    return hovered ? handleVisibleStyle : handleStyle;
+    const base = getHandleStyleCSS(handleStyleType);
+    if (isHandleConnected(edges, id, handleId, type)) return { ...base, opacity: 1 };
+    return hovered ? { ...base, opacity: 1 } : base;
   };
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
@@ -485,10 +679,12 @@ function InputNode({ id, data }: NodeProps<Node<NodeData>>) {
 function OutputNode({ id, data }: NodeProps<Node<NodeData>>) {
   const { editing, text, inputRef, setEditing, setText, commit, onKeyDown } = useInlineEdit(id, (data as NodeData)?.label);
   const edges = useContext(EdgesContext);
+  const handleStyleType = useContext(HandleStyleContext);
   const [hovered, setHovered] = useState(false);
   const hs = (handleId: string | null | undefined, type: 'source' | 'target'): React.CSSProperties => {
-    if (isHandleConnected(edges, id, handleId, type)) return handleVisibleStyle;
-    return hovered ? handleVisibleStyle : handleStyle;
+    const base = getHandleStyleCSS(handleStyleType);
+    if (isHandleConnected(edges, id, handleId, type)) return { ...base, opacity: 1 };
+    return hovered ? { ...base, opacity: 1 } : base;
   };
   const hasColor = !!(data as NodeData)?.color;
   const color = (data as NodeData)?.color;
@@ -577,23 +773,8 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 // ---------- Edge type options ----------
-const edgeTypeOptions = [
-  { label: 'Default', value: 'default' },
-  { label: 'Smooth Step', value: 'smoothstep' },
-  { label: 'Step', value: 'step' },
-  { label: 'Straight', value: 'straight' },
-];
-
-const edgeMarkerOptions = [
-  { label: 'None', value: 'none' },
-  { label: 'Open Arrow (Association)', value: 'open-arrow' },
-  { label: 'Filled Arrow (Navigable)', value: 'filled-arrow' },
-  { label: 'Hollow Triangle (Generalization)', value: 'hollow-triangle' },
-  { label: 'Hollow Diamond (Aggregation)', value: 'hollow-diamond' },
-  { label: 'Filled Diamond (Composition)', value: 'filled-diamond' },
-  { label: 'Hollow Diamond + Arrow', value: 'hollow-diamond-arrow' },
-  { label: 'Filled Diamond + Arrow', value: 'filled-diamond-arrow' },
-];
+const edgeTypeValues = ['default', 'smoothstep', 'step', 'straight'] as const;
+const edgeMarkerValues = ['none', 'open-arrow', 'filled-arrow', 'hollow-triangle', 'hollow-diamond', 'filled-diamond', 'hollow-diamond-arrow', 'filled-diamond-arrow'] as const;
 
 // ---------- Property Panel ----------
 function PropertyPanel({
@@ -605,9 +786,17 @@ function PropertyPanel({
   bgVariant,
   bgGap,
   bgSize,
+  handleStyleType,
+  language,
   onBgVariantChange,
   onBgGapChange,
   onBgSizeChange,
+  onHandleStyleChange,
+  onLanguageChange,
+  onOpenRegistration,
+  licenseStatus,
+  showWatermark,
+  onShowWatermarkChange,
 }: {
   selected: SelectedElement;
   nodes: Node<NodeData>[];
@@ -617,16 +806,25 @@ function PropertyPanel({
   bgVariant: string;
   bgGap: number;
   bgSize: number;
+  handleStyleType: HandleStyleType;
+  language: 'en' | 'zh';
   onBgVariantChange: (v: string) => void;
   onBgGapChange: (v: number) => void;
   onBgSizeChange: (v: number) => void;
+  onHandleStyleChange: (v: HandleStyleType) => void;
+  onLanguageChange: (v: 'en' | 'zh') => void;
+  onOpenRegistration: () => void;
+  licenseStatus: LicenseStatus | null;
+  showWatermark: boolean;
+  onShowWatermarkChange: (v: boolean) => void;
 }) {
+  const t = useT();
   if (!selected) {
     return (
       <div style={panelStyle}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#666' }}>Background</h3>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#666' }}>{t('background')}</h3>
         <div style={fieldStyle}>
-          <label>Pattern</label>
+          <label>{t('pattern')}</label>
           <select
             style={inputStyle}
             value={bgVariant}
@@ -634,16 +832,16 @@ function PropertyPanel({
               onBgVariantChange(e.target.value)
             }
           >
-            <option value={BackgroundVariant.Dots}>Dots</option>
-            <option value={BackgroundVariant.Lines}>Lines</option>
-            <option value={BackgroundVariant.Cross}>Cross</option>
-            <option value="none">None</option>
+            <option value={BackgroundVariant.Dots}>{t('dots')}</option>
+            <option value={BackgroundVariant.Lines}>{t('lines')}</option>
+            <option value={BackgroundVariant.Cross}>{t('cross')}</option>
+            <option value="none">{t('none')}</option>
           </select>
         </div>
         {bgVariant !== 'none' && (
           <>
             <div style={fieldStyle}>
-              <label>Gap</label>
+              <label>{t('gap')}</label>
               <input
                 type="range"
                 min={10}
@@ -656,7 +854,7 @@ function PropertyPanel({
               <span style={{ fontSize: 12, color: '#999' }}>{bgGap}px</span>
             </div>
             <div style={fieldStyle}>
-              <label>Size</label>
+              <label>{t('size')}</label>
               <input
                 type="range"
                 min={0.5}
@@ -670,6 +868,99 @@ function PropertyPanel({
             </div>
           </>
         )}
+        <div style={{ ...fieldStyle, marginTop: 16 }}>
+          <label>{t('nodeHandleStyle')}</label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {([
+              { value: 'solid-black' as HandleStyleType, label: t('solidBlack'), bg: '#333', border: '#333' },
+              { value: 'hollow-black' as HandleStyleType, label: t('hollowBlack'), bg: '#fff', border: '#333' },
+              { value: 'light-gray' as HandleStyleType, label: t('lightGray'), bg: '#e2e8f0', border: '#e2e8f0' },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onHandleStyleChange(opt.value)}
+                style={{
+                  flex: 1, padding: '8px 4px', borderRadius: 6,
+                  border: handleStyleType === opt.value ? '2px solid #10b981' : '1px solid #e0e0e0',
+                  background: '#fff', cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  transition: 'all 150ms ease',
+                }}
+              >
+                <div style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: opt.bg, border: `2px solid ${opt.border}`,
+                }} />
+                <span style={{ fontSize: 10, color: '#666', whiteSpace: 'nowrap' }}>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ ...fieldStyle, marginTop: 16 }}>
+          <label>{t('language')}</label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {([
+              { value: 'en' as const, label: 'English' },
+              { value: 'zh' as const, label: '中文' },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onLanguageChange(opt.value)}
+                style={{
+                  flex: 1, padding: '8px 4px', borderRadius: 6,
+                  border: language === opt.value ? '2px solid #10b981' : '1px solid #e0e0e0',
+                  background: '#fff', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  transition: 'all 150ms ease',
+                  fontSize: 12, fontWeight: 500, color: '#333',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {isTauri() && licenseStatus?.is_registered && (
+          <div style={fieldStyle}>
+            <label>
+              <input
+                type="checkbox"
+                checked={showWatermark}
+                onChange={(e) => onShowWatermarkChange(e.target.checked)}
+                style={{ marginRight: 6 }}
+              />
+              {t('exportWatermark')}
+            </label>
+          </div>
+        )}
+        {isTauri() && (
+          <div style={{ ...fieldStyle, marginTop: 28, paddingTop: 20, borderTop: '1px solid #e2e8f0' }}>
+            <label style={{ color: '#64748b' }}>{t('license')}</label>
+            <button
+              onClick={onOpenRegistration}
+              style={{
+                width: '100%', padding: '10px', borderRadius: 8, marginTop: 6,
+                border: licenseStatus?.is_registered ? '1px solid #bbf7d0' : '1px solid #3b82f6',
+                background: licenseStatus?.is_registered ? '#f0fdf4' : '#eff6ff',
+                color: licenseStatus?.is_registered ? '#166534' : '#1d4ed8',
+                cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              {licenseStatus?.is_registered ? (
+                <>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                  {t('registeredVersion')} · {licenseStatus.days_remaining}{t('days')}
+                </>
+              ) : (
+                t('registerActivate')
+              )}
+            </button>
+          </div>
+        )}
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <a href="https://underflow.emsoro.cn/" onClick={(e) => { e.preventDefault(); if (isTauri()) openExternalUrl('https://underflow.emsoro.cn/'); else window.open('https://underflow.emsoro.cn/', '_blank'); }} rel="noopener noreferrer" style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none', cursor: 'pointer' }}>{t('aboutUs')}</a>
+        </div>
       </div>
     );
   }
@@ -679,12 +970,12 @@ function PropertyPanel({
     if (!node) return null;
     return (
       <div style={panelStyle}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Node Properties</h3>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>{t('nodeProperties')}</h3>
         <div style={{ ...fieldStyle, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ fontSize: 12, color: '#999', flexShrink: 0 }}>ID: {node.id}</span>
         </div>
         <div style={fieldStyle}>
-          <label>Label</label>
+          <label>{t('label')}</label>
           <input
             style={inputStyle}
             value={node.data?.label ?? ''}
@@ -694,7 +985,7 @@ function PropertyPanel({
           />
         </div>
         <div style={fieldStyle}>
-          <label>Shape</label>
+          <label>{t('shape')}</label>
           <select
             style={inputStyle}
             value={node.type === 'condition' ? 'diamond' : 'rectangle'}
@@ -711,12 +1002,12 @@ function PropertyPanel({
               }
             }}
           >
-            <option value="rectangle">Rectangle</option>
-            <option value="diamond">Diamond</option>
+            <option value="rectangle">{t('rectangle')}</option>
+            <option value="diamond">{t('diamond')}</option>
           </select>
         </div>
         <div style={fieldStyle}>
-          <label>Border Style</label>
+          <label>{t('borderStyle')}</label>
           <select
             style={inputStyle}
             value={node.data?.borderStyle || 'solid'}
@@ -724,12 +1015,12 @@ function PropertyPanel({
               onUpdateNode(node.id, { borderStyle: e.target.value })
             }
           >
-            <option value="solid">Solid</option>
-            <option value="dashed">Dashed</option>
+            <option value="solid">{t('solid')}</option>
+            <option value="dashed">{t('dashed')}</option>
           </select>
         </div>
         <div style={fieldStyle}>
-          <label>Color</label>
+          <label>{t('color')}</label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
             <button
               title="Default (Black border)"
@@ -822,12 +1113,12 @@ function PropertyPanel({
   if (!edge) return null;
   return (
     <div style={panelStyle}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Edge Properties</h3>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>{t('edgeProperties')}</h3>
       <div style={{ ...fieldStyle, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 12, color: '#999', flexShrink: 0 }}>{edge.source} → {edge.target}</span>
       </div>
       <div style={fieldStyle}>
-        <label>Label</label>
+        <label>{t('label')}</label>
         <input
           style={inputStyle}
           value={(edge.label as string) ?? ''}
@@ -837,7 +1128,7 @@ function PropertyPanel({
         />
       </div>
       <div style={fieldStyle}>
-        <label>Type</label>
+        <label>{t('type')}</label>
         <select
           style={inputStyle}
           value={edge.type ?? 'default'}
@@ -845,15 +1136,16 @@ function PropertyPanel({
             onUpdateEdge(edge.id, { type: e.target.value })
           }
         >
-          {edgeTypeOptions.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          {edgeTypeValues.map((v) => {
+            const keyMap: Record<string, keyof typeof translations.en> = {
+              default: 'edgeDefault', smoothstep: 'edgeSmoothStep', step: 'edgeStep', straight: 'edgeStraight',
+            };
+            return <option key={v} value={v}>{t(keyMap[v])}</option>;
+          })}
         </select>
       </div>
       <div style={fieldStyle}>
-        <label>Arrow</label>
+        <label>{t('arrow')}</label>
         <select
           style={inputStyle}
           value={(edge.data as EdgeData)?.markerType ?? 'open-arrow'}
@@ -861,13 +1153,19 @@ function PropertyPanel({
             onUpdateEdge(edge.id, { data: { ...edge.data, markerType: e.target.value } });
           }}
         >
-          {edgeMarkerOptions.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {edgeMarkerValues.map((v) => {
+            const keyMap: Record<string, keyof typeof translations.en> = {
+              'none': 'markerNone', 'open-arrow': 'markerOpenArrow', 'filled-arrow': 'markerFilledArrow',
+              'hollow-triangle': 'markerHollowTriangle', 'hollow-diamond': 'markerHollowDiamond',
+              'filled-diamond': 'markerFilledDiamond', 'hollow-diamond-arrow': 'markerHollowDiamondArrow',
+              'filled-diamond-arrow': 'markerFilledDiamondArrow',
+            };
+            return <option key={v} value={v}>{t(keyMap[v])}</option>;
+          })}
         </select>
       </div>
       <div style={fieldStyle}>
-        <label>Line</label>
+        <label>{t('line')}</label>
         <select
           style={inputStyle}
           value={(edge.data as EdgeData)?.lineStyle ?? 'solid'}
@@ -875,9 +1173,9 @@ function PropertyPanel({
             onUpdateEdge(edge.id, { data: { ...edge.data, lineStyle: e.target.value } });
           }}
         >
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
+          <option value="solid">{t('solid')}</option>
+          <option value="dashed">{t('dashed')}</option>
+          <option value="dotted">{t('dotted')}</option>
         </select>
       </div>
       <div style={fieldStyle}>
@@ -890,7 +1188,7 @@ function PropertyPanel({
             }
             style={{ marginRight: 6 }}
           />
-          Animated
+          {t('animated')}
         </label>
       </div>
     </div>
@@ -907,8 +1205,39 @@ const FlowchartAppInner = () => {
   const [bgVariant, setBgVariant] = useState<string>(BackgroundVariant.Dots);
   const [bgGap, setBgGap] = useState(20);
   const [bgSize, setBgSize] = useState(1);
+  const [showWatermark, setShowWatermark] = useState(true);
+  const [handleStyleType, setHandleStyleType] = useState<HandleStyleType>('solid-black');
+  const [language, setLanguage] = useState<'en' | 'zh'>('en');
   const rfInstance = useRef<ReactFlowInstance<Node<NodeData>, Edge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const t = useCallback((key: keyof typeof translations.en): string => {
+    return translations[language][key];
+  }, [language]);
+
+  // Load settings from IndexedDB on mount
+  useEffect(() => {
+    (async () => {
+      const [savedBgVariant, savedBgGap, savedBgSize, savedHandleStyle, savedLang] = await Promise.all([
+        loadSettings('bgVariant', BackgroundVariant.Dots),
+        loadSettings('bgGap', 20),
+        loadSettings('bgSize', 1),
+        loadSettings('handleStyle', 'solid-black' as HandleStyleType),
+        loadSettings('language', 'en' as 'en' | 'zh'),
+      ]);
+      setBgVariant(savedBgVariant);
+      setBgGap(savedBgGap);
+      setBgSize(savedBgSize);
+      setHandleStyleType(savedHandleStyle);
+      setLanguage(savedLang);
+    })();
+  }, []);
+
+  // Save settings to IndexedDB when changed
+  useEffect(() => { saveSettings('bgVariant', bgVariant); }, [bgVariant]);
+  useEffect(() => { saveSettings('bgGap', bgGap); }, [bgGap]);
+  useEffect(() => { saveSettings('bgSize', bgSize); }, [bgSize]);
+  useEffect(() => { saveSettings('handleStyle', handleStyleType); }, [handleStyleType]);
+  useEffect(() => { saveSettings('language', language); }, [language]);
 
   // File state
   const [filePath, setFilePath] = useState<string | null>(null);
@@ -917,6 +1246,9 @@ const FlowchartAppInner = () => {
   const isDirtyRef = useRef(false);
   const skipDirtyRef = useRef(true); // skip initial render
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const clipboardRef = useRef<Node<NodeData> | null>(null);
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
+  const [showRegistration, setShowRegistration] = useState(false);
 
   // Auto-hide save notification
   useEffect(() => {
@@ -924,6 +1256,19 @@ const FlowchartAppInner = () => {
     const timer = setTimeout(() => setSaveMsg(null), 3000);
     return () => clearTimeout(timer);
   }, [saveMsg]);
+
+  // Load license status on mount
+  useEffect(() => {
+    if (!isTauri()) return;
+    (async () => {
+      try {
+        const status = await getLicenseStatus();
+        setLicenseStatus(status);
+      } catch (err) {
+        console.error('Failed to load license status:', err);
+      }
+    })();
+  }, []);
 
   // Track changes to mark dirty
   useEffect(() => {
@@ -1133,7 +1478,7 @@ const FlowchartAppInner = () => {
     skipDirtyRef.current = true; // prevent save from triggering dirty
     // Show save success notification
     const fileName = path.split(/[\\/]/).pop() ?? path;
-    setSaveMsg(`保存成功 ${fileName} (${timeStr})`);
+    setSaveMsg(`${t('saveSuccess')} ${fileName} (${timeStr})`);
   }, [nodes, edges]);
 
   const getDefaultFileName = useCallback(() => {
@@ -1148,7 +1493,7 @@ const FlowchartAppInner = () => {
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!isTauri()) { alert('Save is only available in the desktop app.'); return; }
+    if (!isTauri()) { alert(t('saveOnlyDesktop')); return; }
     try {
       if (filePath) {
         await doSave(filePath);
@@ -1159,26 +1504,27 @@ const FlowchartAppInner = () => {
       }
     } catch (err) {
       console.error('Save failed:', err);
-      alert('保存失败');
+      alert(t('saveFail'));
     }
   }, [filePath, doSave, getDefaultFileName]);
 
   const handleSaveAs = useCallback(async () => {
-    if (!isTauri()) { alert('Save is only available in the desktop app.'); return; }
+    if (!isTauri()) { alert(t('saveOnlyDesktop')); return; }
     try {
       const path = await saveFileDialog(getDefaultFileName());
       if (!path) return;
       await doSave(path);
     } catch (err) {
       console.error('Save As failed:', err);
-      alert('保存失败');
+      alert(t('saveFail'));
     }
   }, [doSave, getDefaultFileName]);
 
-  // Keyboard shortcuts: Ctrl+S save, Ctrl+Shift+S save as
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Shift+S save as, Ctrl+C copy, Ctrl+V paste
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'S') {
+      const isMod = e.ctrlKey || e.metaKey;
+      if (isMod && e.key === 'S') {
         if (e.shiftKey) {
           e.preventDefault();
           handleSaveAs();
@@ -1187,10 +1533,29 @@ const FlowchartAppInner = () => {
           handleSave();
         }
       }
+      if (isMod && e.key === 'c' && selected?.type === 'node') {
+        const node = nodes.find((n) => n.id === selected.id);
+        if (node) {
+          clipboardRef.current = JSON.parse(JSON.stringify(node));
+        }
+      }
+      if (isMod && e.key === 'v' && clipboardRef.current) {
+        e.preventDefault();
+        const src = clipboardRef.current;
+        const id = `node-${nodeCount}`;
+        setNodeCount((c) => c + 1);
+        const newNode: Node<NodeData> = {
+          ...src,
+          id,
+          selected: false,
+          position: { x: src.position.x + 40, y: src.position.y + 40 },
+        };
+        setNodes((nds) => [...nds, newNode]);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSave, handleSaveAs]);
+  }, [handleSave, handleSaveAs, selected, nodes, nodeCount, setNodes]);
 
   // Auto-save every 60 seconds
   useEffect(() => {
@@ -1213,7 +1578,7 @@ const FlowchartAppInner = () => {
   }, [filePath, nodes, edges]);
 
   const handleOpen = useCallback(async () => {
-    if (!isTauri()) { alert('Open is only available in the desktop app.'); return; }
+    if (!isTauri()) { alert(t('openOnlyDesktop')); return; }
     try {
       const path = await openFileDialog();
       if (!path) return;
@@ -1228,7 +1593,7 @@ const FlowchartAppInner = () => {
       setLastSavedTime(null);
     } catch (err) {
       console.error('Open failed:', err);
-      alert('Failed to open flowchart.');
+      alert(t('openOnlyDesktop'));
     }
   }, [setNodes, setEdges]);
 
@@ -1251,6 +1616,88 @@ const FlowchartAppInner = () => {
     return { el, restore: () => { panels.forEach((p) => { p.style.visibility = ''; }); controls.forEach((c) => { c.style.visibility = ''; }); minimap.forEach((m) => { m.style.visibility = ''; }); } };
   }, []);
 
+  const addWatermarkToSvg = (svgText: string): string => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, 'image/svg+xml');
+    const svgEl = doc.querySelector('svg');
+    if (!svgEl) return svgText;
+
+    const getAttr = (name: string): number => {
+      const val = svgEl.getAttribute(name);
+      if (!val) return 0;
+      const num = parseFloat(val);
+      return isNaN(num) ? 0 : num;
+    };
+
+    let w = getAttr('width');
+    let h = getAttr('height');
+
+    if (w === 0 || h === 0) {
+      const viewBox = svgEl.getAttribute('viewBox');
+      if (viewBox) {
+        const parts = viewBox.split(/\s+/).map(p => parseFloat(p));
+        if (parts.length >= 4 && !isNaN(parts[2]) && !isNaN(parts[3])) {
+          w = parts[2];
+          h = parts[3];
+        }
+      }
+    }
+
+    if (w === 0) w = 800;
+    if (h === 0) h = 600;
+
+    const fontSize = Math.max(12, Math.min(w / 60, 16));
+    const wmY = h - fontSize - 4;
+    const wmX = w / 2;
+
+    const watermarkGroup = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
+    watermarkGroup.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+    watermarkGroup.setAttribute('font-size', fontSize.toString());
+
+    const textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text');
+    textEl.setAttribute('x', wmX.toString());
+    textEl.setAttribute('y', wmY.toString());
+    textEl.setAttribute('text-anchor', 'middle');
+
+    const tspan1 = doc.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+    tspan1.setAttribute('fill', '#cbd5e1');
+    tspan1.setAttribute('font-weight', '500');
+    tspan1.textContent = 'Presented with ';
+
+    const tspan2 = doc.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+    tspan2.setAttribute('fill', '#475569');
+    tspan2.setAttribute('font-weight', '600');
+    tspan2.textContent = 'UnderFlow';
+
+    textEl.appendChild(tspan1);
+    textEl.appendChild(tspan2);
+    watermarkGroup.appendChild(textEl);
+    svgEl.appendChild(watermarkGroup);
+
+    return new XMLSerializer().serializeToString(doc);
+  };
+
+  const addWatermarkToCanvas = (canvas: HTMLCanvasElement): void => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const fontSize = 48;
+    const text1 = 'Presented with ';
+    const text2 = 'UnderFlow';
+    ctx.font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    const text1Width = ctx.measureText(text1).width;
+    ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    const text2Width = ctx.measureText(text2).width;
+    const totalWidth = text1Width + text2Width;
+    const x = (canvas.width - totalWidth) / 2;
+    const y = canvas.height - fontSize * 0.6;
+    ctx.font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(text1, x, y);
+    ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = '#475569';
+    ctx.fillText(text2, x + text1Width, y);
+  };
+
   const onExportSVG = useCallback(async () => {
     let restore: (() => void) | undefined;
     try {
@@ -1266,15 +1713,21 @@ const FlowchartAppInner = () => {
       } else {
         svgText = decodeURIComponent(payload);
       }
+      if (showWatermark || !licenseStatus?.is_registered) {
+        svgText = addWatermarkToSvg(svgText);
+      }
       const fileName = getExportName('svg');
       if (isTauri()) {
         const path = await saveImageDialog(fileName, 'SVG Image', ['svg']);
         if (path) await saveTextFile(path, svgText);
       } else {
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.download = fileName;
-        link.href = dataUrl;
+        link.href = url;
         link.click();
+        URL.revokeObjectURL(url);
       }
     } catch (err) { console.error('Export SVG failed:', err); alert('Export SVG failed: ' + err); }
     finally { restore?.(); }
@@ -1287,7 +1740,22 @@ const FlowchartAppInner = () => {
       restore = r;
       if (!el) { alert('Viewport not found'); return; }
       const dataUrl = await toPng(el, { backgroundColor: '#fff', pixelRatio: 3, cacheBust: true, skipAutoScale: true });
-      const base64 = dataUrl.split(',')[1];
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      if (showWatermark || !licenseStatus?.is_registered) {
+        addWatermarkToCanvas(canvas);
+      }
+      const finalDataUrl = canvas.toDataURL('image/png');
+      const base64 = finalDataUrl.split(',')[1];
       const fileName = getExportName('png');
       if (isTauri()) {
         const path = await saveImageDialog(fileName, 'PNG Image', ['png']);
@@ -1295,7 +1763,7 @@ const FlowchartAppInner = () => {
       } else {
         const link = document.createElement('a');
         link.download = fileName;
-        link.href = dataUrl;
+        link.href = finalDataUrl;
         link.click();
       }
     } catch (err) { console.error('Export PNG failed:', err); alert('Export PNG failed: ' + err); }
@@ -1325,6 +1793,8 @@ const FlowchartAppInner = () => {
 
   return (
     <EdgesContext.Provider value={edges}>
+    <HandleStyleContext.Provider value={handleStyleType}>
+    <LangContext.Provider value={language}>
     <div ref={wrapperRef} style={{ display: 'flex', width: '100%', height: '100vh' }}>
       {/* Canvas */}
       <div style={{ flex: 1, height: '100%' }}>
@@ -1360,23 +1830,24 @@ const FlowchartAppInner = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Add node buttons */}
               <div style={{
-                display: 'flex', gap: 8, background: 'rgba(255,255,255,0.92)',
+                display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(255,255,255,0.92)',
                 padding: '10px 14px', borderRadius: 16,
                 boxShadow: '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
                 backdropFilter: 'blur(12px)',
               }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {[
-                  { label: 'Start', color: '#059669', hover: '#047857', icon: (
+                  { label: t('start'), color: '#059669', hover: '#047857', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M4 9h10M10 5l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   ), onClick: addInputNode },
-                  { label: 'Node', color: '#10b981', hover: '#059669', icon: (
+                  { label: t('node'), color: '#10b981', hover: '#059669', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M9 4v10M4 9h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   ), onClick: addNode },
-                  { label: 'End', color: '#34d399', hover: '#10b981', icon: (
+                  { label: t('end'), color: '#34d399', hover: '#10b981', icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ pointerEvents: 'none' }}>
                       <path d="M14 9H4M8 5L4 9l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -1385,7 +1856,7 @@ const FlowchartAppInner = () => {
                   <button
                     key={item.label}
                     onClick={item.onClick}
-                    title={`Add ${item.label}`}
+                    title={item.label}
                     style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                       background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
@@ -1420,9 +1891,14 @@ const FlowchartAppInner = () => {
                     </span>
                   </button>
                 ))}
+                <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                  <a href="https://underflow.emsoro.cn/" onClick={(e) => { e.preventDefault(); if (isTauri()) openExternalUrl('https://underflow.emsoro.cn/'); else window.open('https://underflow.emsoro.cn/', '_blank'); }} rel="noopener noreferrer" style={{ fontSize: 10, color: '#3b82f6', textDecoration: 'none', whiteSpace: 'nowrap', cursor: 'pointer' }}>{t('aboutUs')}</a>
+                  <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', userSelect: 'none' }}>v1.1.0</span>
+                </div>
+                </div>
               </div>
               {/* Action buttons */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {isTauri() && (
                   <>
                     <button onClick={handleSave} style={actionBtnStyle}>
@@ -1430,13 +1906,13 @@ const FlowchartAppInner = () => {
                         <path d="M11 13H3a1 1 0 01-1-1V2a1 1 0 011-1h5l3 3v8a1 1 0 01-1 1z" stroke="currentColor" strokeWidth="1.2"/>
                         <path d="M9 13V8H5v5M5 1v3h3" stroke="currentColor" strokeWidth="1.2"/>
                       </svg>
-                      Save
+                      {t('save')}
                     </button>
                     <button onClick={handleOpen} style={actionBtnStyle}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: 'none' }}>
                         <path d="M12 10v2a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1h3l2 2h3a1 1 0 011 1v4z" stroke="currentColor" strokeWidth="1.2"/>
                       </svg>
-                      Open
+                      {t('open')}
                     </button>
                   </>
                 )}
@@ -1447,7 +1923,7 @@ const FlowchartAppInner = () => {
                     <circle cx="7" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
                     <circle cx="7" cy="11" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
                   </svg>
-                  Layout
+                  {t('layout')}
                 </button>
                 <button onClick={onExportSVG} style={actionBtnStyle}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: 'none' }}>
@@ -1520,9 +1996,17 @@ const FlowchartAppInner = () => {
               bgVariant={bgVariant}
               bgGap={bgGap}
               bgSize={bgSize}
+              handleStyleType={handleStyleType}
+              language={language}
               onBgVariantChange={setBgVariant}
               onBgGapChange={setBgGap}
               onBgSizeChange={setBgSize}
+              onHandleStyleChange={setHandleStyleType}
+              onLanguageChange={setLanguage}
+              onOpenRegistration={() => setShowRegistration(true)}
+              licenseStatus={licenseStatus}
+              showWatermark={showWatermark}
+              onShowWatermarkChange={setShowWatermark}
             />
           </div>
         )}
@@ -1539,7 +2023,15 @@ const FlowchartAppInner = () => {
           {saveMsg}
         </div>
       )}
+      <RegistrationDialog
+        isOpen={showRegistration}
+        onClose={() => setShowRegistration(false)}
+        onStatusChange={(status) => setLicenseStatus(status)}
+        language={language}
+      />
     </div>
+    </LangContext.Provider>
+    </HandleStyleContext.Provider>
     </EdgesContext.Provider>
   );
 };
