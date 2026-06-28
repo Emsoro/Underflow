@@ -423,6 +423,12 @@ function map_to_plantuml_arrow(markerType, lineStyle):
     default                                  → dash + ">"
 ```
 
+## 打赏
+
+如果这个项目对你有帮助，欢迎打赏支持：
+
+![Donate](Donate.jpg)
+
 ## License
 
 MIT
